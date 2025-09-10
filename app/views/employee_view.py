@@ -1,5 +1,6 @@
 from db.database import conn, cursor
 
+
 def add_employee():
     """
     Добавление сотрудника
@@ -14,11 +15,13 @@ def add_employee():
     snils = input("Enter snils: ")
     department_id = input("Enter department id: ")
     return first_name, last_name, middle_name, phone_number, email, passport_data, inn, snils, department_id
+
 def add_employee_result(success: bool):
     if success:
         print("Employee added successfully")
     else:
         print("Employee addition failed")
+
 def display_all_employees(employees):
     """
     Отображение всех сотрудников
@@ -47,4 +50,17 @@ def display_all_employees(employees):
         print(f"{id_val:<5} {first_name:<15} {last_name:<15} {middle_name:<15} {email:<25} {phone_number:<15} {passport_data:<15} {inn:<15} {snils:<15} {department_id:<8}")
     
     print(f"\nВсего сотрудников: {len(employees)}")
-    
+
+def edit_employee_dep_id():
+    """
+    Ввод идентификаторов для смены department_id у сотрудника
+    """
+    employee_id = input("Введите id сотрудника: ")
+    new_department_id = input("Введите новый department id: ")
+    return employee_id, new_department_id
+
+def edit_employee_dep_id_result(success: bool):
+    if success:
+        print("Department id успешно обновлен")
+    else:
+        print("Не удалось обновить department id")

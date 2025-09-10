@@ -1,5 +1,5 @@
 from db.database import init_db
-from views.employee_view import add_employee, add_employee_result, display_all_employees
+from views.employee_view import add_employee, add_employee_result, display_all_employees, edit_employee_dep_id, edit_employee_dep_id_result
 from controllers import employee_controller
 
 
@@ -9,7 +9,7 @@ def main():
         print("\nMenu:")
         print("1. Add employee")
         print("2. Get all employees")
-        print("3. Add department")
+        print("3. Edit department id employee")
         print("4. Add task")
         print("5. Add user")
         print("6. Exit")
@@ -22,7 +22,9 @@ def main():
             employees = employee_controller.get_all_employees()
             display_all_employees(employees)
         elif choice == "3":
-            pass
+            employee_id, new_department_id = edit_employee_dep_id()
+            success = employee_controller.edit_department_id(employee_id, new_department_id)
+            edit_employee_dep_id_result(success)
         elif choice == "4":
             pass
         elif choice == "5":
@@ -32,6 +34,7 @@ def main():
             break
         else:
             print("Invalid choice")
+
 
 if __name__ == "__main__":
     main()
