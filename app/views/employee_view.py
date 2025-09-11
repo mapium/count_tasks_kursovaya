@@ -64,3 +64,13 @@ def edit_employee_dep_id_result(success: bool):
         print("Department id успешно обновлен")
     else:
         print("Не удалось обновить department id")
+
+def delete_employee():
+    employee_id = input("Введите ID сотрудника, которого необходимо удалить: ")
+    return employee_id
+
+def delete_employee_result(success: bool):
+    if success:
+        print("Сотрудник успешно удалён")
+    else:
+        print("Не удалось удалить сотрудника")

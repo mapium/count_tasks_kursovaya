@@ -41,3 +41,13 @@ def edit_department_id(employee_id, new_department_id):
     except sqlite3.Error as e:
         print(f"Error editing department_id: {e}")
         return False
+
+def del_employee(employee_id):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM employees WHERE id = ?", (employee_id))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Ошибка удаления сотрудника: {e}")
+        return False
