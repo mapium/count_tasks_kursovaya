@@ -1,130 +1,171 @@
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import os
+from typing import Optional, Tuple
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения из .env файла
+load_dotenv()
 
 def init_db():
     """
-    Подключение к БД
+    Подключение к PostgreSQL БД
     :return: conn - подключение, cursor - курсор
     """
     try:
-        conn = sqlite3.connect("../count_tasks_kursovaya/app/db/count_tasks.db")
-        cursor = conn.cursor()
+        # Параметры подключения к PostgreSQL
+        conn = psycopg2.connect(
+            host=os.getenv('DB_HOST', 'localhost'),
+            port=os.getenv('DB_PORT', '5432'),
+            database=os.getenv('DB_NAME', 'count_tasks'),
+            user=os.getenv('DB_USER', 'postgres'),
+            password=os.getenv('DB_PASSWORD', '0000')
+        )
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
         # Проверяем подключение
         cursor.execute("SELECT 1")
-        cursor.executescript('''
+        
+        # Создание таблиц
+        cursor.execute('''
         CREATE TABLE IF NOT EXISTS departments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL UNIQUE,
             description TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        ''')
+        
+        cursor.execute('''
         CREATE TABLE IF NOT EXISTS employees (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER UNIQUE,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            middle_name TEXT,
-            phone_number TEXT,
-            email TEXT NOT NULL UNIQUE,
-            passport_data TEXT NOT NULL UNIQUE,
-            inn TEXT UNIQUE,
-            snils TEXT UNIQUE,
+            first_name VARCHAR(255) NOT NULL,
+            last_name VARCHAR(255) NOT NULL,
+            middle_name VARCHAR(255),
+            phone_number VARCHAR(20),
+            email VARCHAR(255) NOT NULL UNIQUE,
+            passport_data VARCHAR(255) NOT NULL UNIQUE,
+            inn VARCHAR(12) UNIQUE,
+            snils VARCHAR(11) UNIQUE,
             department_id INTEGER NOT NULL,
-            is_active BOOLEAN DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT
         );
+        ''')
+        
+        cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(255) NOT NULL UNIQUE,
+            password_hash VARCHAR(255) NOT NULL,
             employee_id INTEGER NOT NULL UNIQUE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_login DATETIME,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login TIMESTAMP,
             FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
         );
+        ''')
+        
+        cursor.execute('''
         CREATE TABLE IF NOT EXISTS roles (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL UNIQUE,
             description TEXT
         );
+        ''')
+        
+        cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_roles (
             user_id INTEGER NOT NULL,
             role_id INTEGER NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (user_id, role_id),
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
         );
+        ''')
+        
+        cursor.execute('''
         CREATE TABLE IF NOT EXISTS task_statuses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL UNIQUE,
             order_index INTEGER NOT NULL
         );
+        ''')
+        
+        cursor.execute('''
         CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
+            id SERIAL PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
             description TEXT,
             creator_id INTEGER NOT NULL,
             assignee_id INTEGER,
             department_id INTEGER NOT NULL,
             status_id INTEGER NOT NULL,
-            priority TEXT DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high')),
+            priority VARCHAR(10) DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high')),
             planned_start_date DATE,
             planned_end_date DATE NOT NULL,
             actual_start_date DATE,
             actual_end_date DATE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (creator_id) REFERENCES employees(id) ON DELETE RESTRICT,
             FOREIGN KEY (assignee_id) REFERENCES employees(id) ON DELETE SET NULL,
             FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT,
             FOREIGN KEY (status_id) REFERENCES task_statuses(id) ON DELETE RESTRICT
         );
+        ''')
+        
+        cursor.execute('''
         CREATE TABLE IF NOT EXISTS task_comments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             task_id INTEGER NOT NULL,
             author_id INTEGER NOT NULL,
             comment_text TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
             FOREIGN KEY (author_id) REFERENCES employees(id) ON DELETE RESTRICT
         );
         ''')
-        # Создание индексов
-        cursor.executescript('''
-        CREATE INDEX IF NOT EXISTS idx_employees_last_name ON employees (last_name);
-        CREATE INDEX IF NOT EXISTS idx_tasks_assignee_status ON tasks(assignee_id, status_id);
-        CREATE INDEX IF NOT EXISTS idx_tasks_department_status ON tasks(department_id, status_id);
-        CREATE INDEX IF NOT EXISTS idx_tasks_planned_end_date ON tasks(planned_end_date);
         
-        CREATE INDEX IF NOT EXISTS idx_tasks_actual_end_date ON tasks(actual_end_date);
-        CREATE INDEX IF NOT EXISTS idx_employees_department_id ON employees(department_id);
-        ''')
+        # Создание индексов
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_employees_last_name ON employees (last_name);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_assignee_status ON tasks(assignee_id, status_id);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_department_status ON tasks(department_id, status_id);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_planned_end_date ON tasks(planned_end_date);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_tasks_actual_end_date ON tasks(actual_end_date);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_employees_department_id ON employees(department_id);')
         
         # Заполнение начальных данных
-        cursor.executescript('''
-        INSERT OR IGNORE INTO task_statuses (name, order_index) VALUES
+        cursor.execute('''
+        INSERT INTO task_statuses (name, order_index) VALUES
         ('К выполнению', 1),
         ('В работе', 2),
         ('На проверке', 3),
-        ('Выполнено', 4);
-
-        INSERT OR IGNORE INTO roles (name, description) VALUES
+        ('Выполнено', 4)
+        ON CONFLICT (name) DO NOTHING;
+        ''')
+        
+        cursor.execute('''
+        INSERT INTO roles (name, description) VALUES
         ('admin', 'Администратор системы. Полный доступ ко всем функциям.'),
         ('ceo', 'Руководитель предприятия. Полный доступ к просмотру и отчетам.'),
         ('manager', 'Руководитель подразделения. Управление своим отделом.'),
-        ('employee', 'Сотрудник. Может работать только со своими задачами.');
+        ('employee', 'Сотрудник. Может работать только со своими задачами.')
+        ON CONFLICT (name) DO NOTHING;
         ''')
+        
         conn.commit()
-        print("База данных инициализирована успешно!")
+        print("База данных PostgreSQL инициализирована успешно!")
         return conn, cursor
-    except sqlite3.Error as e:
-        print(f"Ошибка инициализации базы данных: {e}")
+    except psycopg2.Error as e:
+        print(f"Ошибка инициализации базы данных PostgreSQL: {e}")
         return None, None
 
 
-# Создание подключения  и курсора
+# Создание подключения и курсора
 conn, cursor = init_db()
 if conn and cursor:
     print("Можно продолжать работу")
