@@ -55,16 +55,20 @@ def init_db():
             FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT
         );
         ''')
-        
+        # CREATE TABLE IF NOT EXISTS users (
+        #     id SERIAL PRIMARY KEY,
+        #     username VARCHAR(255) UNIQUE NOT NULL,
+        #     password_hash VARCHAR(255) NOT NULL,
+        #     employee_id INTEGER UNIQUE,
+        #     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        #     last_login TIMESTAMP,
+        #     FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+        # );
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
-            username VARCHAR(255) NOT NULL UNIQUE,
-            password_hash VARCHAR(255) NOT NULL,
-            employee_id INTEGER NOT NULL UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_login TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+            username character varying(50) UNIQUE NOT NULL,
+            password_hash character varying(200) NOT NULL
         );
         ''')
         
