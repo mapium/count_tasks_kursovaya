@@ -1,6 +1,3 @@
-from db.database import conn, cursor
-
-
 def add_employee():
     """
     Добавление сотрудника
@@ -35,17 +32,17 @@ def display_all_employees(employees):
     print("=" * 150)
     
     for employee in employees:
-        # employee структура: RealDictRow с именованными полями
-        id_val = employee.get('id', '') or ''
-        first_name = employee.get('first_name', '') or ''
-        last_name = employee.get('last_name', '') or ''
-        middle_name = employee.get('middle_name', '') or ''
-        phone_number = employee.get('phone_number', '') or ''
-        email = employee.get('email', '') or ''
-        passport_data = employee.get('passport_data', '') or ''
-        inn = employee.get('inn', '') or ''
-        snils = employee.get('snils', '') or ''
-        department_id = employee.get('department_id', '') or ''
+        # employee: экземпляр модели Employees (SQLModel)
+        id_val = getattr(employee, 'id', '') or ''
+        first_name = getattr(employee, 'first_name', '') or ''
+        last_name = getattr(employee, 'last_name', '') or ''
+        middle_name = getattr(employee, 'middle_name', '') or ''
+        phone_number = getattr(employee, 'phone_number', '') or ''
+        email = getattr(employee, 'email', '') or ''
+        passport_data = getattr(employee, 'passport_data', '') or ''
+        inn = getattr(employee, 'inn', '') or ''
+        snils = getattr(employee, 'snils', '') or ''
+        department_id = getattr(employee, 'department_id', '') or ''
         
         print(f"{id_val:<5} {first_name:<15} {last_name:<15} {middle_name:<15} {email:<25} {phone_number:<15} {passport_data:<15} {inn:<15} {snils:<15} {department_id:<8}")
     
@@ -55,8 +52,8 @@ def edit_employee_dep_id():
     """
     Ввод идентификаторов для смены department_id у сотрудника
     """
-    employee_id = input("Введите id сотрудника: ")
-    new_department_id = input("Введите новый department id: ")
+    employee_id = input("Введите id сотрудника: ").strip()
+    new_department_id = input("Введите новый department id: ").strip()
     return employee_id, new_department_id
 
 def edit_employee_dep_id_result(success: bool):
@@ -65,8 +62,8 @@ def edit_employee_dep_id_result(success: bool):
     else:
         print("Не удалось обновить department id")
 
-def delete_employee():
-    employee_id = input("Введите ID сотрудника, которого необходимо удалить: ")
+def input_delete_employee():
+    employee_id = input("Введите ID сотрудника, которого необходимо удалить: ").strip()
     return employee_id
 
 def delete_employee_result(success: bool):

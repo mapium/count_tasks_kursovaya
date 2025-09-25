@@ -1,19 +1,17 @@
-# class Users():
-#     def __init(self, id, username, password_hash, employee_id, create_at, last_login):
-#         self.id=id
-#         self.username=username
-#         self.password_hash=password_hash
-#         self.employee_id=employee_id
-#         self.create_at=create_at
-#         self.last_login=last_login
+from typing import Optional
+from decimal import Decimal
+from sqlmodel import SQLModel, Field
 
-#     def __repr__(self):
-#         return(Users({self.id}, {self.username}, {self.password_hash}, {self.employee_id}, {self.create_at}, {self.last_login}))
-class Users():
-    def __init(self, id, username, password_hashed):
-        self.id=id
-        self.username=username
-        self.password_hashed=password_hashed
+class Users(SQLModel, table=True):
+    id: int = Field(primary_key=True, default=None)
+    username: str = Field(max_length=255)
+    password_hash: str = Field(max_length=255)
 
-    def __repr__(self):
-        return(Users({self.id}, {self.username}, {self.password_hashed} ))
+
+
+# self.id=id
+# self.username=username
+# self.password_hash=password_hash
+# self.employee_id=employee_id
+# self.create_at=create_at
+# self.last_login=last_login

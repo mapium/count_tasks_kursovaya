@@ -1,27 +1,38 @@
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
-# Создаем объект хэшера с параметрами по умолчанию
-ph = PasswordHasher()
-def reg():
-    while True:
-        print('''Добро пожаловать! Выберите пункт меню:
-        1. Регистрация
-        2. Вход
+def show_auth_menu():
+    print('''Добро пожаловать! Выберите пункт меню:
+        1. Вход
+        2. Регистрация
         3. Выход''')
-        user_input = input()
-        if user_input == '1':
-            print("Введите логин:")
-            login = input()
-            print("Введите пароль:")
-            # Хеширование пароля
-            password = input()
-            hashed_password = ph.hash(password)
-            
-        print(f"Хэш пароля: {hashed_password}")
-        # Проверка пароля
-        try:
-        # True если пароль совпадает с хэшем
-            ph.verify(hashed_password, password)
-            print("Пароль подтвержден")
-        except VerifyMismatchError:
-            print("Пароль не совпадает")
+    return input().strip()
+
+
+def prompt_login_credentials():
+    print('Введите логин:')
+    username = input().strip()
+    print('Введите пароль:')
+    password = input()
+    return username, password
+
+
+def prompt_register_credentials():
+    print('Введите логин:')
+    username = input().strip()
+    print('Введите пароль:')
+    password = input()
+    print('Повторите пароль:')
+    password_repeat = input()
+    return username, password, password_repeat
+
+
+def show_login_result(success: bool):
+    if success:
+        print('Вы вошли в систему')
+    else:
+        print('Неверный логин или пароль')
+
+
+def show_register_result(success: bool):
+    if success:
+        print('Регистрация прошла успешно!')
+    else:
+        print('Пользователь с таким логином уже существует')

@@ -1,15 +1,18 @@
-class Employees():
-    def __init__(self,user_id,first_name,last_name,middle_name,phone_number,email,passport_data,inn,snils,department_id):
-        self.user_id=user_id
-        self.first_name=first_name
-        self.last_name=last_name
-        self.middle_name=middle_name
-        self.phone_number=phone_number
-        self.email=email
-        self.passport_data=passport_data
-        self.inn=inn
-        self.snils=snils
-        self.department_id=department_id
+from typing import Optional
+from decimal import Decimal
+from datetime import date
+from sqlmodel import SQLModel, Field
 
-    def __repr__(self):
-        return(Employees({self.user_id},{self.first_name},{self.last_name},{self.middle_name},{self.phone_number},{self.email},{self.passport_data},{self.inn},{self.snils},{self.department_id}))
+class Employees(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    first_name: str = Field(max_length=255)
+    last_name: str = Field(max_length=255)
+    middle_name: Optional[str] = Field(default=None, max_length=255)
+    phone_number: Optional[str] = Field(default=None, max_length=12)
+    email: str = Field(max_length=255)
+    passport_data: str = Field(max_length=10)
+    inn: Optional[str] = Field(default=None, max_length=12)
+    snils: Optional[str] = Field(default=None, max_length=11)
+    department_id: int = Field(foreign_key="departments.id")
+    is_active: bool = Field(default=True)

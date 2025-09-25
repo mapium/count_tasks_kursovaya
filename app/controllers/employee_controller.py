@@ -1,61 +1,53 @@
 import psycopg2
+from models.employee_models import Employees
+from models.users_model import Users 
 from psycopg2.extras import RealDictCursor
-from db.database import conn, cursor
+from db.database import engine
+from sqlmodel import Session, select
 
 
 def add_employee(first_name, last_name, middle_name, phone_number, email, passport_data, inn, snils, department_id):
     """
     Добавление нового сотрудника
     """
-    try:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("""
-            INSERT INTO employees (first_name, last_name, middle_name, phone_number, email, passport_data, inn, snils, department_id) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (first_name, last_name, middle_name, phone_number, email, passport_data, inn, snils, department_id))
-        conn.commit()
+    with Session(engine) as session:
+        employee = Employees(first_name=first_name, last_name=last_name, middle_name=middle_name, phone_number=phone_number, email=email, passport_data=passport_data, inn=inn, snils=snils, department_id=department_id)
+        session.add(employee)
+        session.commit()
         return True
-    except psycopg2.Error as e:
-        print(f"Error adding employee: {e}")
-        return False
-
 
 def get_all_employees():
     """
     Получение всех сотрудников
     """
-    try:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("SELECT * FROM employees ORDER BY id")
-        return cursor.fetchall()
-    except psycopg2.Error as e:
-        print(f"Error getting employees: {e}")
-        return []
+    with Session(engine) as session:
+        employees = session.exec(select(Employees)).all()
+        return employees
 
 
 def edit_department_id(employee_id, new_department_id):
     """
     Редактирование department_id у сотрудника
     """
-    try:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("""
-            UPDATE employees 
-            SET department_id = %s, updated_at = CURRENT_TIMESTAMP 
-            WHERE id = %s
-        """, (new_department_id, employee_id))
-        conn.commit()
+    with Session(engine) as session:
+        employee_id_int = int(str(employee_id).strip())
+        new_department_id_int = int(str(new_department_id).strip())
+        employee = session.get(Employees, employee_id_int)
+        if employee is None:
+            return False
+        employee.department_id = new_department_id_int
+        session.commit()
         return True
-    except psycopg2.Error as e:
-        print(f"Error editing department_id: {e}")
-        return False
 
 def del_employee(employee_id):
-    try:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("DELETE FROM employees WHERE id = %s", (employee_id,))
-        conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Ошибка удаления сотрудника: {e}")
-        return False
+    """
+    Удаление сотрудника
+    """
+    with Session(engine) as session:
+        employee = session.get(Employees, employee_id)
+        if employee:
+            session.delete(employee)
+            session.commit()
+            return True
+        else:
+            return False
