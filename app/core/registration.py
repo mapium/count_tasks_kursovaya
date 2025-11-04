@@ -1,4 +1,4 @@
-from controllers.users_controller import register_user, authorize_user
+from app.controllers.users_controller import register_user, authorize_user
 
 def reg():
     while True:

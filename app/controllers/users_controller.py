@@ -1,8 +1,8 @@
-from db.database import engine
+from app.db.database import engine
 import psycopg2
-from core.security import ph
+from app.core.security import ph
 from argon2.exceptions import VerifyMismatchError
-from models.users_model import Users
+from app.models.users_model import Users
 from sqlmodel import Session, select
 
 def register_user(username, password):

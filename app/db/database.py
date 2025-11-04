@@ -1,9 +1,7 @@
 from sqlmodel import SQLModel, create_engine
 import os
 from dotenv import load_dotenv
-from models.users_model import Users
-from models.employee_models import Employees
-from models.departments_model import Departments
+from app.models import *
 
 load_dotenv()
 DB_USER = os.getenv("DB_USER")
@@ -15,10 +13,14 @@ DB_NAME = os.getenv("DB_NAME")
 DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 engine = create_engine(DATABASE_URL, echo=True)
-
 def init_db():
     print(DATABASE_URL)
     SQLModel.metadata.create_all(engine)
+
+def close_db():
+    engine.dispose()
+def get_engine():
+    return engine
 init_db()
 
 #         # Проверяем подключение

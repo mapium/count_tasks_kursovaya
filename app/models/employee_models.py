@@ -1,7 +1,9 @@
 from typing import Optional
-from decimal import Decimal
-from datetime import date
-from sqlmodel import SQLModel, Field
+from datetime import datetime, timezone
+from sqlmodel import SQLModel, Field, Relationship
+from app.models.departments_model import Departments
+from app.models.users_model import Users
+
 
 class Employees(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -16,3 +18,8 @@ class Employees(SQLModel, table=True):
     snils: Optional[str] = Field(default=None, max_length=11)
     department_id: int = Field(foreign_key="departments.id")
     is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    department: Departments = Relationship(back_populates="employees")
+    user: Optional[Users] = Relationship(back_populates="employees")
