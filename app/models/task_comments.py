@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List
 if TYPE_CHECKING:
     from .tasks import Tasks
-    from .users_model import Users
+    from .users import Users
 
 class TaskComments(SQLModel, table=True):
     id: int = Field(primary_key=True, default=None)

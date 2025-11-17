@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field, Relationship
 from app.models.departments_model import Departments
-from app.models.users_model import Users
+from app.models.users import Users
 
 
 class Employees(SQLModel, table=True):

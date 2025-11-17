@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, List
 from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime, timezone, date
 if TYPE_CHECKING:
-    from .users_model import Users
+    from .users import Users
     from .departments_model import Departments
     from .task_status import Task_Status
     from .task_comments import TaskComments

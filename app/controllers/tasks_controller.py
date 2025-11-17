@@ -1,13 +1,13 @@
-from app.models.employee_models import Employees
+from app.models.tasks import Tasks
 from sqlmodel import Session, select
 from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
-def get_all_employees(session: Session) -> List[Employees]:
+def get_all_tasks(session: Session) -> List[Tasks]:
     """ Вывод информации """
     try:
-        sql=select(Employees)
+        sql=select(Tasks)
         result=session.exec(sql).all()
         return result
     except Exception as e:
@@ -15,10 +15,10 @@ def get_all_employees(session: Session) -> List[Employees]:
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Внутренняя ошибка сервера: {str(e)}")
 
-def get_employee_by_id(id: int, session: Session) -> Employees:
+def get_task_by_id(id: int, session: Session) -> Tasks:
     """ Поиск по идентификатору """
     try:
-        result = session.get(Employees, id)
+        result = session.get(Tasks, id)
         if not result :
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"идентификатор не найден")
         return result
@@ -27,7 +27,7 @@ def get_employee_by_id(id: int, session: Session) -> Employees:
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=f"Внутренняя ошибка сервера: {str(e)}")
 
-def post_employee(data: Employees, session: Session) -> Optional[Employees]:
+def post_task(data: Tasks, session: Session) -> Optional[Tasks]:
     """ Добавление """
     try:
         session.add(data)
@@ -43,10 +43,10 @@ def post_employee(data: Employees, session: Session) -> Optional[Employees]:
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=f"Внутренняя ошибка сервера: {str(e)}")
 
-def delete_employee(id: int, session: Session) -> str:
+def delete_task(id: int, session: Session) -> str:
     """ Удаление """
     try:
-        result= session.get(Employees, id)
+        result= session.get(Tasks, id)
         if not result :
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"идентификатор не найден")
         session.delete(result)
@@ -57,10 +57,10 @@ def delete_employee(id: int, session: Session) -> str:
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=f"Внутренняя ошибка сервера: {str(e)}")
 
-def put_employee(id: int, data: Employees, session: Session) -> Employees:
+def put_task(id: int, data: Tasks, session: Session) -> Tasks:
     """ Изменение """
     try:
-        result= session.get(Employees, id)
+        result= session.get(Tasks, id)
         if not result :
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"идентификатор не найден")
         for key, value in data.dict(exclude_unset=True).items():
