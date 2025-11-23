@@ -24,7 +24,7 @@ def sign_up(form_data: UserSchema=Depends(USC.as_form),session:Session=Depends(g
     return registration(form_data, session)
 
 @router.post("/auth/login",tags=["auth"])
-def login_route(form_data: UserSchema=Depends(UserSchema.as_form),session:Session=Depends(get_session)):
+def login_route(form_data: OAuth2PasswordRequestForm = Depends(),session:Session=Depends(get_session)):
     return login(form_data,session)
 
 @router.post("/auth/refresh",tags=["auth"])

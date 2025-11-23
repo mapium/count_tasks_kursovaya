@@ -3,10 +3,11 @@ from sqlmodel import Session
 from app.db.session import get_session
 from app.controllers.employee_controller import get_all_employees, get_employee_by_id, post_employee, delete_employee, put_employee
 from app.models.employee_models import Employees
+from fastapi_pagination import Page
 
 router = APIRouter() 
 
-@router.get("/employees", tags=["employees"])
+@router.get("/employees", tags=["employees"], response_model=Page[Employees])
 def show_employees_route(session: Session = Depends(get_session)):
     return get_all_employees(session)
 

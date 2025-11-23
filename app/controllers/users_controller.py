@@ -62,7 +62,7 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_session)):
     """     Авторизация      """
-    user = session.exec(select(Users).where(Users.username == form_data.username)).one_or_none()
+    user = session.exec(select(Users).where(Users.username == form_data.username)).first()
 
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный логин или пароль")

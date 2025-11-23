@@ -1,15 +1,16 @@
 from app.models.departments_model import Departments
 from sqlmodel import Session, select
-from typing import List, Optional
+from typing import Optional
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
 
-def get_all_departments(session: Session) -> List[Departments]:
+def get_all_departments(session: Session) -> Page[Departments]:
     """ Вывод информации """
     try:
-        sql=select(Departments)
-        result=session.exec(sql).all()
-        return result
+        sql = select(Departments)
+        return paginate(session, sql)
     except Exception as e:
         session.rollback()
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

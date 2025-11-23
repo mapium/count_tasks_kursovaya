@@ -49,7 +49,7 @@ def get_current_user(token:str=Depends(oauth2_scheme), session=Depends(get_sessi
     username=decode_token(token)
     if not username:
         raise  HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Невалидный токен")
-    user=session.exec(select(Users).where(Users.username==username )).one_or_none()
+    user=session.exec(select(Users).where(Users.username==username )).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Пользователь не найден")
     return user
@@ -82,5 +82,19 @@ def admin_required(user: Users = Depends(get_current_user), session=Depends(get_
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Требуются права администратора"
+        )
+    return user
+
+def department_manager_required(user: Users = Depends(get_current_user), session=Depends(get_session)):
+    """
+    Проверка роли Руководителя отдела
+    :param user: Объект класса Users
+    :param session: сессия для базы данных
+    :return: объект Users или исключение HTTPException 403
+    """
+    if user.role_id != 2 and user.role_id != 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Требуются права руководителя отдела/администратора"
         )
     return user

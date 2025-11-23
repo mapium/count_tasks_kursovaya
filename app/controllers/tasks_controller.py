@@ -1,15 +1,19 @@
+from app.core.security import department_manager_required
 from app.models.tasks import Tasks
 from sqlmodel import Session, select
-from typing import List, Optional
-from fastapi import HTTPException, status
+from typing import Optional
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
 
-def get_all_tasks(session: Session) -> List[Tasks]:
+from app.models.users import Users
+
+def get_all_tasks(session: Session, user: Users = Depends(department_manager_required)) -> Page[Tasks]:
     """ Вывод информации """
     try:
-        sql=select(Tasks)
-        result=session.exec(sql).all()
-        return result
+        sql = select(Tasks)
+        return paginate(session, sql)
     except Exception as e:
         session.rollback()
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
