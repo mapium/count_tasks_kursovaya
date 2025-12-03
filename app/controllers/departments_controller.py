@@ -6,6 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 
+from app.schemas.departments_schema import DepartmentsCreateSchema
+
 def get_all_departments(session: Session) -> Page[Departments]:
     """ Вывод информации """
     try:
@@ -28,7 +30,7 @@ def get_department_by_id(id: int, session: Session) -> Departments:
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=f"Внутренняя ошибка сервера: {str(e)}")
 
-def post_department(data: Departments, session: Session) -> Optional[Departments]:
+def post_department(data: DepartmentsCreateSchema, session: Session) -> Optional[Departments]:
     """ Добавление """
     try:
         session.add(data)
@@ -58,7 +60,7 @@ def delete_department(id: int, session: Session) -> str:
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=f"Внутренняя ошибка сервера: {str(e)}")
 
-def put_department(id: int, data: Departments, session: Session) -> Departments:
+def put_department(id: int, data: DepartmentsCreateSchema, session: Session) -> Departments:
     """ Изменение """
     try:
         result= session.get(Departments, id)

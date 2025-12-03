@@ -41,3 +41,12 @@ class UserSchemaCreateAsAdmin(BaseModel):
         role_id: int = Form(..., description="ID роли")):
         
         return cls(username=username, password=password, role_id=role_id)
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+    @classmethod
+    def as_form(cls,
+        username: str = Form(..., description="Имя пользователя"),
+        password: str = Form(..., description="Пароль")):
+        return cls(username=username, password=password)

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime, timezone, date
 if TYPE_CHECKING:
@@ -16,11 +16,11 @@ class Tasks(SQLModel, table=True):
     assignee_id: int = Field(foreign_key="users.id")
     department_id: int = Field(foreign_key="departments.id")
     status_id: int = Field(foreign_key="task_status.id")
-    priority: str = Field(max_length=10, default="medium")
+    priority: str = Field(max_length=10, default="малый")
     planned_start_date: date = Field(default=None)
     planned_end_date: date = Field(default=None)
-    actual_start_date: date = Field(default=None)
-    actual_end_date: date = Field(default=None)
+    actual_start_date: Optional[date] = Field(default=None)
+    actual_end_date: Optional[date] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

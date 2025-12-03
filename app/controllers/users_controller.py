@@ -2,7 +2,6 @@ from datetime import timedelta
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import select, Session
@@ -10,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.security import create_access_token, decode_token, admin_required
 from app.db.session import get_session
 from app.models.users import Users
-from app.schemas.user_schema import UserSchema, UserSchemaCreate, UserSchemaCreateAsAdmin
+from app.schemas.user_schema import UserSchema, UserSchemaCreate, UserSchemaCreateAsAdmin, UserLogin
 from dotenv import load_dotenv
 import os
 ph=PasswordHasher()
@@ -59,7 +58,7 @@ def admin_registration(data: UserSchemaCreateAsAdmin, user: Users = Depends(admi
         detail=f"Внутренняя ошибка сервера: {str(e)}")
 
 def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    form_data: UserLogin,
     session: Session = Depends(get_session)):
     """     Авторизация      """
     user = session.exec(select(Users).where(Users.username == form_data.username)).first()
