@@ -16,7 +16,7 @@ async def on_startup(app: FastAPI):
     yield
     close_db()
 
-app_v1 = FastAPI(title="API по учёту производственных задач", lifespan=on_startup, description="Приложение содержит информацию о контингенте сотрудников предприятия и распределению их по подразделениям, а также проводит учёт производственных задач. tg - crsd01, email - artem.miller2312@gmail.com", version="1.0.0")
+app_v1 = FastAPI(title="API по учёту производственных задач", lifespan=on_startup, description="Приложение содержит информацию о контингенте сотрудников предприятия и распределению их по подразделениям, а также проводит учёт производственных задач. Контактная информация: tg - crsd01, email - artem.miller2312@gmail.com", version="1.0.0")
 async def read_items(token: Annotated[str, Depends(oauth2_scheme)]):
     return {"token": token}
 app_v1.include_router(user_router, prefix="/api/v1")
