@@ -3,23 +3,38 @@ from sqlmodel import Session
 from fastapi_pagination import Page
 from app.core.security import department_manager_required, get_current_user
 from app.db.session import get_session
-from app.controllers.tasks_controller import get_all_tasks, get_tasks_by_department_id, get_my_tasks, post_task, delete_task, put_task, update_task_status, add_comment_to_task
+from app.controllers.tasks_controller import (
+    get_all_tasks,
+    get_tasks_by_department_id,
+    get_my_tasks,
+    post_task,
+    delete_task,
+    put_task,
+    update_task_status,
+    add_comment_to_task,
+)
 from app.models.tasks import Tasks
 from app.models.task_comments import TaskComments
 from app.models.users import Users
-from app.schemas.task_schema import TaskCreate, TasksGroupedByDepartment, TaskStatusUpdate, TaskCommentCreate
+from app.schemas.task_schema import (
+    TaskCreate,
+    TasksGroupedByDepartment,
+    TaskStatusUpdate,
+    TaskCommentCreate,
+    GetTaskSchema,
+)
 
 router = APIRouter() 
 
-@router.get("/tasks", tags=["Задачи"], response_model=TasksGroupedByDepartment, description="Вывод информации, сгруппированной по подразделениям")
+@router.get("/tasks", tags=["Задачи"], response_model=TasksGroupedByDepartment, description="Вывод информации, сгруппированной по подразделениям. только с правами менеджера и выше")
 def Показать_все_задачи_подразделений(session: Session = Depends(get_session), user: Users = Depends(department_manager_required)):
     return get_all_tasks(session, user)
 
-@router.get("/tasks/my-department", tags=["Задачи"], response_model=Page[Tasks], description="Вывод всех задач подразделения текущего пользователя")
+@router.get("/tasks/my-department", tags=["Задачи"], response_model=Page[GetTaskSchema], description="Вывод всех задач подразделения текущего пользователя")
 def Вывод_задач_своего_подразделения(session: Session = Depends(get_session), user: Users = Depends(get_current_user)):
     return get_tasks_by_department_id(session, user)
 
-@router.get("/tasks/my", tags=["Задачи"], response_model=Page[Tasks], description="Вывод всех задач текущего залогиненного пользователя")
+@router.get("/tasks/my", tags=["Задачи"], response_model=Page[GetTaskSchema], description="Вывод всех задач текущего залогиненного пользователя")
 def Показать_мои_задачи(session: Session = Depends(get_session), user: Users = Depends(get_current_user)):
     return get_my_tasks(session, user)
 

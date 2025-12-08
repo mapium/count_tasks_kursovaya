@@ -5,10 +5,12 @@ from fastapi import Depends, HTTPException, status
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import select, Session
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from app.core.security import create_access_token, decode_token, admin_required
 from app.db.session import get_session
 from app.models.users import Users
+from app.models.departments_model import Departments
 from app.schemas.user_schema import UserSchema, UserSchemaCreate, UserSchemaCreateAsAdmin, UserLogin
 from dotenv import load_dotenv
 import os
@@ -39,6 +41,21 @@ def registration(data:UserSchemaCreate=Depends(UserSchemaCreate.as_form),session
 def admin_registration(data: UserSchemaCreateAsAdmin, user: Users = Depends(admin_required), session: Session = Depends(get_session)):
     """ Добавление пользователя администратором """
     try:
+        # Проверка: если роль менеджера (role_id == 2), проверяем количество менеджеров
+        if data.role_id == 2:
+            # Получаем количество подразделений
+            departments_count = session.exec(select(func.count(Departments.id))).one()
+            
+            # Получаем количество существующих менеджеров
+            managers_count = session.exec(select(func.count(Users.id)).where(Users.role_id == 2)).one()
+            
+            # Проверяем, не превышает ли количество менеджеров количество подразделений
+            if managers_count >= departments_count:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Невозможно добавить менеджера: количество менеджеров ({managers_count}) не должно превышать количество подразделений ({departments_count})"
+                )
+        
         obj = Users(
             username=data.username,
             password=ph.hash(data.password),
@@ -48,6 +65,8 @@ def admin_registration(data: UserSchemaCreateAsAdmin, user: Users = Depends(admi
         session.commit()
         session.refresh(obj)
         return obj
+    except HTTPException:
+        raise
     except IntegrityError:
         session.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,

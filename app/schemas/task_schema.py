@@ -20,11 +20,25 @@ class TaskCreate(BaseModel):
     actual_end_date: Optional[date] = None
 
 
+class GetTaskSchema(BaseModel):
+    """Схема для получения задачи"""
+    id: int
+    title: str
+    description: str
+    creator: str
+    assignee: str
+    department: str
+    status: str
+    priority: str
+    planned_start_date: Optional[date] = None
+    planned_end_date: Optional[date] = None
+
+
 class DepartmentTasksGroup(BaseModel):
     """Схема для группы задач по отделу"""
     department_id: int
     department_name: str
-    tasks: List[Tasks]
+    tasks: List[GetTaskSchema]
 
 
 class TasksGroupedByDepartment(BaseModel):
@@ -40,4 +54,3 @@ class TaskStatusUpdate(BaseModel):
 class TaskCommentCreate(BaseModel):
     """Схема для создания комментария к задаче"""
     comment_text: str
-

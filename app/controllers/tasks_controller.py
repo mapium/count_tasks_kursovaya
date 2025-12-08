@@ -4,16 +4,41 @@ from app.models.task_status import Task_Status
 from app.models.task_comments import TaskComments
 from app.models.departments_model import Departments
 from app.models.employee_models import Employees
-from app.schemas.task_schema import TaskCreate, TasksGroupedByDepartment, DepartmentTasksGroup, TaskStatusUpdate, TaskCommentCreate
+from app.schemas.task_schema import (
+    TaskCreate,
+    TasksGroupedByDepartment,
+    DepartmentTasksGroup,
+    TaskStatusUpdate,
+    TaskCommentCreate,
+    GetTaskSchema,
+)
 from datetime import datetime, timezone
 from sqlmodel import Session, select
 from typing import Optional, Dict, List, Any
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
-from fastapi_pagination import Page
-from fastapi_pagination.ext.sqlmodel import paginate
+from fastapi_pagination import Page, Params, create_page
 
 from app.models.users import Users
+
+
+def _task_to_schema(task: Tasks, department_name: Optional[str] = None) -> GetTaskSchema:
+    """Преобразование задачи в схему ответа."""
+    return GetTaskSchema(
+        id=task.id,
+        title=task.title,
+        description=task.description,
+        creator=task.creator.username if getattr(task, "creator", None) else "Неизвестно",
+        assignee=task.assignee.username if getattr(task, "assignee", None) else "Неизвестно",
+        department=(
+            department_name
+            or (task.department.name if getattr(task, "department", None) else "Неизвестно")
+        ),
+        status=task.status.name if getattr(task, "status", None) else "Неизвестно",
+        priority=task.priority,
+        planned_start_date=task.planned_start_date,
+        planned_end_date=task.planned_end_date,
+    )
 
 def get_all_tasks(session: Session, user: Users = Depends(department_manager_required)) -> TasksGroupedByDepartment:
     """ Вывод информации, сгруппированной по подразделениям """
@@ -32,7 +57,7 @@ def get_all_tasks(session: Session, user: Users = Depends(department_manager_req
                     "department_name": department.name,
                     "tasks": []
                 }
-            grouped_tasks[department.id]["tasks"].append(task)
+            grouped_tasks[department.id]["tasks"].append(_task_to_schema(task, department.name))
         
         # Преобразуем в список групп
         departments_groups = [
@@ -50,7 +75,7 @@ def get_all_tasks(session: Session, user: Users = Depends(department_manager_req
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Внутренняя ошибка сервера: {str(e)}")
 
-def get_tasks_by_department_id(session: Session, user: Users) -> Page[Tasks]:
+def get_tasks_by_department_id(session: Session, user: Users) -> Page[GetTaskSchema]:
     """ Вывод всех задач подразделения текущего пользователя """
     try:
         # Находим сотрудника по user_id, чтобы получить department_id
@@ -64,7 +89,9 @@ def get_tasks_by_department_id(session: Session, user: Users) -> Page[Tasks]:
         
         # Получаем задачи только подразделения пользователя
         sql = select(Tasks).where(Tasks.department_id == employee.department_id)
-        return paginate(session, sql)
+        tasks = session.exec(sql).all()
+        tasks_schema = [_task_to_schema(task) for task in tasks]
+        return create_page(tasks_schema, total=len(tasks_schema), params=Params())
     except HTTPException:
         raise
     except Exception as e:
@@ -72,13 +99,15 @@ def get_tasks_by_department_id(session: Session, user: Users) -> Page[Tasks]:
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=f"Внутренняя ошибка сервера: {str(e)}")
 
-def get_my_tasks(session: Session, user: Users = Depends(get_current_user)) -> Page[Tasks]:
+def get_my_tasks(session: Session, user: Users = Depends(get_current_user)) -> Page[GetTaskSchema]:
     """ Вывод всех задач текущего залогиненного пользователя (назначенные и созданные) """
     try:
         sql = select(Tasks).where(
             (Tasks.assignee_id == user.id) | (Tasks.creator_id == user.id)
         ).order_by(Tasks.department_id)
-        return paginate(session, sql)
+        tasks = session.exec(sql).all()
+        tasks_schema = [_task_to_schema(task) for task in tasks]
+        return create_page(tasks_schema, total=len(tasks_schema), params=Params())
     except Exception as e:
         session.rollback()
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -87,7 +116,25 @@ def get_my_tasks(session: Session, user: Users = Depends(get_current_user)) -> P
 def post_task(data: TaskCreate, session: Session, user: Users = Depends(department_manager_required)) -> Optional[Tasks]:
     """ Добавление задачи (без необходимости указывать id) """
     try:
-        task = Tasks(**data.dict())
+        payload = data.dict()
+
+        # Проверяем, что исполнитель принадлежит тому же подразделению, что и задача
+        assignee_emp = session.exec(select(Employees).where(Employees.user_id == payload["assignee_id"])).first()
+        creator_emp = session.exec(select(Employees).where(Employees.user_id == payload["creator_id"])).first()
+
+        if not assignee_emp or not creator_emp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Создатель и исполнитель должны быть привязаны к подразделению"
+            )
+
+        if assignee_emp.department_id != payload["department_id"] or creator_emp.department_id != payload["department_id"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Задачу можно ставить только в подразделении исполнителя и создателя"
+            )
+
+        task = Tasks(**payload)
         session.add(task)
         session.commit()
         session.refresh(task)
@@ -121,7 +168,27 @@ def put_task(id: int, data: Tasks, session: Session, user: Users = Depends(depar
         result= session.get(Tasks, id)
         if not result :
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"идентификатор не найден")
-        for key, value in data.dict(exclude_unset=True).items():
+        updates = data.dict(exclude_unset=True)
+
+        # Если меняются исполнители/создатели/подразделение — проверяем согласованность
+        assignee_id = updates.get("assignee_id", result.assignee_id)
+        creator_id = updates.get("creator_id", result.creator_id)
+        department_id = updates.get("department_id", result.department_id)
+
+        assignee_emp = session.exec(select(Employees).where(Employees.user_id == assignee_id)).first()
+        creator_emp = session.exec(select(Employees).where(Employees.user_id == creator_id)).first()
+        if not assignee_emp or not creator_emp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Создатель и исполнитель должны быть привязаны к подразделению"
+            )
+        if assignee_emp.department_id != department_id or creator_emp.department_id != department_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Задачу можно ставить только в подразделении исполнителя и создателя"
+            )
+
+        for key, value in updates.items():
             setattr(result, key, value)
         session.add(result)
         session.commit()
