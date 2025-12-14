@@ -11,22 +11,22 @@ from app.schemas.departments_schema import DepartmentsCreateSchema
 
 router = APIRouter() 
 
-@router.get("/departments", tags=["Подразделения"], response_model=Page[Departments])
-def список_подразделений(session: Session = Depends(get_session)):
+@router.get("/departments", tags=["Подразделения"], response_model=Page[Departments],summary="Список подразделений")
+def departments_list_route(session: Session = Depends(get_session)):
     return get_all_departments(session)
 
-@router.get("/departments/{id}", tags=["Подразделения"])
-def подразделение_по_идентификатору(id: int, session: Session = Depends(get_session)):
+@router.get("/departments/{id}", tags=["Подразделения"], summary="Подразделение по идентификатору")
+def department_by_id_route(id: int, session: Session = Depends(get_session)):
     return get_department_by_id(id, session)
 
-@router.post("/departments", tags=["Подразделения"], description="Только с правами администратора")
-def создание_подразделения(employee: DepartmentsCreateSchema, session: Session = Depends(get_session), user: Users = Depends(admin_required)):
+@router.post("/departments", tags=["Подразделения"], description="Только с правами администратора", summary="Создание подразделения")
+def create_department_route(employee: DepartmentsCreateSchema, session: Session = Depends(get_session), user: Users = Depends(admin_required)):
     return post_department(employee, session)
 
-@router.put("/departments/{id}", tags=["Подразделения"], description="Только с правами администратора")
-def изменить_подразделение(id: int, data: DepartmentsCreateSchema, session: Session = Depends(get_session), user: Users = Depends(admin_required)):
+@router.put("/departments/{id}", tags=["Подразделения"], description="Только с правами администратора", summary="Изменить подразделение")
+def put_department_route(id: int, data: DepartmentsCreateSchema, session: Session = Depends(get_session), user: Users = Depends(admin_required)):
     return put_department(id, data, session)
 
-@router.delete("/departments/{id}", tags=["Подразделения"], description="Только с правами администратора")
-def удалить_подразделение(id: int, session: Session = Depends(get_session), user: Users = Depends(admin_required)):
+@router.delete("/departments/{id}", tags=["Подразделения"], description="Только с правами администратора", summary="Удалить подразделение")
+def delete_department_route(id: int, session: Session = Depends(get_session), user: Users = Depends(admin_required)):
     return delete_department(id, session)
