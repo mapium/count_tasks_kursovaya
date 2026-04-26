@@ -170,6 +170,28 @@ def get_my_department_employees(session: Session, user: Users) -> Page[Employees
             detail=f"Внутренняя ошибка сервера: {str(e)}"
         )
 
+
+def get_current_user_department_employees(session: Session, user: Users) -> Page[Employees]:
+    """Вывод работников подразделения текущего пользователя (для любой авторизованной роли)."""
+    try:
+        employee = session.exec(select(Employees).where(Employees.user_id == user.id)).first()
+        if not employee:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Сотрудник не найден для текущего пользователя"
+            )
+
+        sql = select(Employees).where(Employees.department_id == employee.department_id)
+        return paginate(session, sql)
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Внутренняя ошибка сервера: {str(e)}"
+        )
+
 def post_employee_to_my_department(data: EmployeeCreate, session: Session, user: Users) -> Optional[Employees]:
     """ Добавление работника только в свой отдел менеджера """
     try:

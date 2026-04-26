@@ -33,10 +33,11 @@ def get_department_by_id(id: int, session: Session) -> Departments:
 def post_department(data: DepartmentsCreateSchema, session: Session) -> Optional[Departments]:
     """ Добавление """
     try:
-        session.add(data)
+        obj = Departments(**data.dict())
+        session.add(obj)
         session.commit()
-        session.refresh(data)
-        return data
+        session.refresh(obj)
+        return obj
     except IntegrityError:
         session.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, 

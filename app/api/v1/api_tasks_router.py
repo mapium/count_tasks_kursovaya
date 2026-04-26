@@ -7,6 +7,7 @@ from app.controllers.tasks_controller import (
     get_all_tasks,
     get_tasks_by_department_id,
     get_my_tasks,
+    get_task_comments,
     post_task,
     delete_task,
     put_task,
@@ -21,6 +22,7 @@ from app.schemas.task_schema import (
     TasksGroupedByDepartment,
     TaskStatusUpdate,
     TaskCommentCreate,
+    TaskCommentSchema,
     GetTaskSchema,
 )
 
@@ -61,3 +63,8 @@ def update_task_status_route(task_id: int, status_data: TaskStatusUpdate, sessio
 @router.post("/tasks/{task_id}/comments", tags=["Задачи"], response_model=TaskComments, description="Добавление комментария к задаче (доступно создателю, исполнителю, администратору или руководителю отдела)", summary="Добавить комментарий к задаче")
 def add_task_comment_route(task_id: int, comment_data: TaskCommentCreate, session: Session = Depends(get_session), user: Users = Depends(get_current_user)):
     return add_comment_to_task(task_id, comment_data, session, user)
+
+
+@router.get("/tasks/{task_id}/comments", tags=["Задачи"], response_model=list[TaskCommentSchema], description="Получение комментариев задачи (доступно создателю, исполнителю, администратору или руководителю отдела)", summary="Получить комментарии задачи")
+def get_task_comments_route(task_id: int, session: Session = Depends(get_session), user: Users = Depends(get_current_user)):
+    return get_task_comments(task_id, session, user)

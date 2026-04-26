@@ -33,3 +33,7 @@ def refresh_token_route(refresh_token:str):
 @router.get("/users", response_model=Page[Users],tags=["Регистрация, авторизация"], description="Только с правами администратора", summary="Список всех пользователей")
 def users_list_route(current_user: Users = Depends(admin_required),session: Session=Depends(get_session)):
         return  get_users(current_user,session)
+
+@router.get("/users/me", response_model=Users, tags=["Регистрация, авторизация"], summary="Текущий пользователь")
+def current_user_route(current_user: Users = Depends(get_current_user)):
+    return current_user

@@ -69,6 +69,7 @@ def generate_task_statuses(session: Session):
         {"name": "В работе", "order_index": 2},
         {"name": "На проверке", "order_index": 3},
         {"name": "Выполнено", "order_index": 4},
+        {"name": "Просрочено", "order_index": 5},
     ]
     
     for status_data in statuses_data:
@@ -230,6 +231,14 @@ def generate_tasks(session: Session, users: list, employees: list, statuses: lis
     tasks = []
     
     priorities = ["малый", "средний", "высокий"]
+    status_by_name = {status.name: status for status in statuses}
+    status_choices = [
+        "К выполнению",
+        "В работе",
+        "На проверке",
+        "Выполнено",
+        "Просрочено",
+    ]
 
     # Сопоставление user_id -> department_id
     user_dept = {emp.user_id: emp.department_id for emp in employees if emp.user_id is not None}
@@ -249,13 +258,23 @@ def generate_tasks(session: Session, users: list, employees: list, statuses: lis
         today = date.today()
         planned_start = today + timedelta(days=random.randint(-30, 30))
         planned_end = planned_start + timedelta(days=random.randint(1, 60))
-        
+        selected_status_name = random.choice(status_choices)
+        selected_status = status_by_name.get(selected_status_name) or random.choice(statuses)
+
         actual_start = None
         actual_end = None
-        if random.choice([True, False]):
+        if selected_status_name == "Просрочено":
+            planned_start = today - timedelta(days=random.randint(20, 60))
+            planned_end = today - timedelta(days=random.randint(1, 15))
             actual_start = planned_start + timedelta(days=random.randint(0, 5))
-            if random.choice([True, False]):
-                actual_end = actual_start + timedelta(days=random.randint(1, 30))
+        elif selected_status_name == "Выполнено":
+            actual_start = planned_start + timedelta(days=random.randint(0, 5))
+            min_end = max(1, (planned_end - actual_start).days)
+            actual_end = actual_start + timedelta(days=random.randint(1, min_end))
+        elif selected_status_name in {"В работе", "На проверке"}:
+            actual_start = planned_start + timedelta(days=random.randint(0, 5))
+        elif random.choice([True, False]):
+            actual_start = planned_start + timedelta(days=random.randint(0, 5))
         
         task = Tasks(
             title=fake.sentence(nb_words=4),
@@ -263,7 +282,7 @@ def generate_tasks(session: Session, users: list, employees: list, statuses: lis
             creator_id=creator_id,
             assignee_id=assignee_id,
             department_id=department_id,
-            status_id=random.choice(statuses).id,
+            status_id=selected_status.id,
             priority=random.choice(priorities),
             planned_start_date=planned_start,
             planned_end_date=planned_end,

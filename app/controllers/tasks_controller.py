@@ -10,6 +10,7 @@ from app.schemas.task_schema import (
     DepartmentTasksGroup,
     TaskStatusUpdate,
     TaskCommentCreate,
+    TaskCommentSchema,
     GetTaskSchema,
 )
 from datetime import datetime, timezone
@@ -22,10 +23,112 @@ from fastapi_pagination import Page, Params, create_page
 from app.models.users import Users
 
 
+ALLOWED_PRIORITIES = {"малый", "средний", "высокий"}
+
+
+def _as_stripped(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _require_positive_int(value: Any, field_label: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Поле '{field_label}' должно быть целым числом"
+        )
+    if parsed <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Поле '{field_label}' должно быть больше нуля"
+        )
+    return parsed
+
+
+def _validate_task_payload_required(payload: Dict[str, Any]) -> None:
+    title = _as_stripped(payload.get("title"))
+    description = _as_stripped(payload.get("description"))
+    priority = _as_stripped(payload.get("priority")).lower()
+
+    if not title:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Поле 'title' обязательно"
+        )
+    if not description:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Поле 'description' обязательно"
+        )
+    if not priority:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Поле 'priority' обязательно"
+        )
+    if priority not in ALLOWED_PRIORITIES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Поле 'priority' должно быть одним из: малый, средний, высокий"
+        )
+
+    _require_positive_int(payload.get("creator_id"), "creator_id")
+    _require_positive_int(payload.get("assignee_id"), "assignee_id")
+    _require_positive_int(payload.get("department_id"), "department_id")
+    _require_positive_int(payload.get("status_id"), "status_id")
+
+    planned_start_date = payload.get("planned_start_date")
+    planned_end_date = payload.get("planned_end_date")
+    if planned_start_date and planned_end_date and planned_end_date < planned_start_date:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Поле 'planned_end_date' не может быть раньше 'planned_start_date'"
+        )
+
+
+def _resolve_creator_department_id(
+    session: Session,
+    creator_id: int,
+    creator_emp: Optional[Employees],
+    creator_user: Optional[Users]
+) -> Optional[int]:
+    creator_is_admin = bool(creator_user and creator_user.role_id == 1)
+    if creator_is_admin:
+        return None
+
+    if creator_user and creator_user.role_id == 2:
+        managed_department = session.exec(
+            select(Departments).where(Departments.department_manager_id == creator_id)
+        ).first()
+        if managed_department:
+            return int(managed_department.id)
+
+    if creator_emp:
+        return int(creator_emp.department_id)
+    return None
+
+
 def _task_to_schema(task: Tasks, department_name: Optional[str] = None) -> GetTaskSchema:
     """Преобразование задачи в схему ответа."""
+    comments = []
+    for comment in getattr(task, "comments", []) or []:
+        comments.append(
+            TaskCommentSchema(
+                id=comment.id,
+                author_id=comment.author_id,
+                author=comment.author.username if getattr(comment, "author", None) else "Неизвестно",
+                comment_text=comment.comment_text,
+                created_at=comment.created_at,
+            )
+        )
+    comments.sort(key=lambda row: row.created_at)
+
     return GetTaskSchema(
         id=task.id,
+        creator_id=task.creator_id,
+        assignee_id=task.assignee_id,
+        department_id=task.department_id,
+        status_id=task.status_id,
         title=task.title,
         description=task.description,
         creator=task.creator.username if getattr(task, "creator", None) else "Неизвестно",
@@ -38,7 +141,64 @@ def _task_to_schema(task: Tasks, department_name: Optional[str] = None) -> GetTa
         priority=task.priority,
         planned_start_date=task.planned_start_date,
         planned_end_date=task.planned_end_date,
+        comments=comments,
     )
+
+
+def _ensure_task_access(task: Tasks, user: Users) -> None:
+    has_access = (
+        task.creator_id == user.id
+        or task.assignee_id == user.id
+        or user.role_id == 1
+        or user.role_id == 2
+    )
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="У вас нет доступа к этой задаче",
+        )
+
+
+def get_task_comments(task_id: int, session: Session, user: Users) -> List[TaskCommentSchema]:
+    """Получение комментариев задачи по идентификатору."""
+    try:
+        if task_id <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Параметр 'task_id' должен быть больше нуля",
+            )
+
+        task = session.get(Tasks, task_id)
+        if not task:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Задача не найдена")
+
+        _ensure_task_access(task, user)
+
+        comments_rows = session.exec(
+            select(TaskComments).where(TaskComments.task_id == task_id).order_by(TaskComments.created_at)
+        ).all()
+        result = []
+        for row in comments_rows:
+            author = session.get(Users, row.author_id)
+            result.append(
+                TaskCommentSchema(
+                    id=row.id,
+                    author_id=row.author_id,
+                    author=author.username if author else "Неизвестно",
+                    comment_text=row.comment_text,
+                    created_at=row.created_at,
+                )
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Внутренняя ошибка сервера: {str(e)}",
+        )
+
 
 def get_all_tasks(session: Session, user: Users = Depends(department_manager_required)) -> TasksGroupedByDepartment:
     """ Вывод информации, сгруппированной по подразделениям """
@@ -117,28 +277,52 @@ def post_task(data: TaskCreate, session: Session, user: Users = Depends(departme
     """ Добавление задачи (без необходимости указывать id) """
     try:
         payload = data.dict()
+        _validate_task_payload_required(payload)
 
-        # Проверяем, что исполнитель принадлежит тому же подразделению, что и задача
+        # Проверяем, что исполнитель и создатель корректно привязаны к подразделению
         assignee_emp = session.exec(select(Employees).where(Employees.user_id == payload["assignee_id"])).first()
         creator_emp = session.exec(select(Employees).where(Employees.user_id == payload["creator_id"])).first()
+        creator_user = session.get(Users, payload["creator_id"])
 
-        if not assignee_emp or not creator_emp:
+        if not assignee_emp:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Создатель и исполнитель должны быть привязаны к подразделению"
+                detail="Исполнитель должен быть привязан к подразделению"
             )
 
-        if assignee_emp.department_id != payload["department_id"] or creator_emp.department_id != payload["department_id"]:
+        # Нормализуем идентификаторы, чтобы избежать ложных срабатываний при сравнении.
+        assignee_department_id = int(assignee_emp.department_id)
+        payload_department_id = int(payload["department_id"])
+        creator_department_id = _resolve_creator_department_id(
+            session=session,
+            creator_id=int(payload["creator_id"]),
+            creator_emp=creator_emp,
+            creator_user=creator_user,
+        )
+        if creator_department_id is None and not (creator_user and creator_user.role_id == 1):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Задачу можно ставить только в подразделении исполнителя и создателя"
+                detail="Создатель должен быть привязан к подразделению"
             )
+
+        if creator_department_id is not None and assignee_department_id != creator_department_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Исполнитель и создатель должны быть из одного подразделения"
+            )
+
+        if payload_department_id != assignee_department_id:
+            # Подтягиваем корректное подразделение автоматически, чтобы не падать
+            # из-за устаревшего/неконсистентного значения из формы.
+            payload["department_id"] = assignee_department_id
 
         task = Tasks(**payload)
         session.add(task)
         session.commit()
         session.refresh(task)
         return task
+    except HTTPException:
+        raise
     except IntegrityError:
         session.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, 
@@ -151,12 +335,19 @@ def post_task(data: TaskCreate, session: Session, user: Users = Depends(departme
 def delete_task(id: int, session: Session, user: Users = Depends(department_manager_required)) -> str:
     """ Удаление """
     try:
+        if id <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Параметр 'id' должен быть больше нуля"
+            )
         result= session.get(Tasks, id)
         if not result :
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"идентификатор не найден")
         session.delete(result)
         session.commit()
         return "Удаление выполнено"
+    except HTTPException:
+        raise
     except Exception as e:
         session.rollback()
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -165,10 +356,56 @@ def delete_task(id: int, session: Session, user: Users = Depends(department_mana
 def put_task(id: int, data: Tasks, session: Session, user: Users = Depends(department_manager_required)) -> Tasks:
     """ Изменение """
     try:
+        if id <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Параметр 'id' должен быть больше нуля"
+            )
         result= session.get(Tasks, id)
         if not result :
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"идентификатор не найден")
         updates = data.dict(exclude_unset=True)
+        if not updates:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Не переданы поля для обновления задачи"
+            )
+
+        if "title" in updates and not _as_stripped(updates.get("title")):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Поле 'title' не может быть пустым"
+            )
+        if "description" in updates and not _as_stripped(updates.get("description")):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Поле 'description' не может быть пустым"
+            )
+        if "priority" in updates:
+            priority = _as_stripped(updates.get("priority")).lower()
+            if not priority:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Поле 'priority' не может быть пустым"
+                )
+            if priority not in ALLOWED_PRIORITIES:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Поле 'priority' должно быть одним из: малый, средний, высокий"
+                )
+            updates["priority"] = priority
+
+        for numeric_field in ("assignee_id", "creator_id", "department_id", "status_id"):
+            if numeric_field in updates:
+                updates[numeric_field] = _require_positive_int(updates.get(numeric_field), numeric_field)
+        if "planned_start_date" in updates or "planned_end_date" in updates:
+            start_date = updates.get("planned_start_date", result.planned_start_date)
+            end_date = updates.get("planned_end_date", result.planned_end_date)
+            if start_date and end_date and end_date < start_date:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Поле 'planned_end_date' не может быть раньше 'planned_start_date'"
+                )
 
         # Если меняются исполнители/создатели/подразделение — проверяем согласованность
         assignee_id = updates.get("assignee_id", result.assignee_id)
@@ -177,12 +414,25 @@ def put_task(id: int, data: Tasks, session: Session, user: Users = Depends(depar
 
         assignee_emp = session.exec(select(Employees).where(Employees.user_id == assignee_id)).first()
         creator_emp = session.exec(select(Employees).where(Employees.user_id == creator_id)).first()
-        if not assignee_emp or not creator_emp:
+        creator_user = session.get(Users, creator_id)
+        creator_department_id = _resolve_creator_department_id(
+            session=session,
+            creator_id=int(creator_id),
+            creator_emp=creator_emp,
+            creator_user=creator_user,
+        )
+
+        if not assignee_emp or (creator_department_id is None and not (creator_user and creator_user.role_id == 1)):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Создатель и исполнитель должны быть привязаны к подразделению"
             )
-        if assignee_emp.department_id != department_id or creator_emp.department_id != department_id:
+        if int(assignee_emp.department_id) != int(department_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Задачу можно ставить только в подразделении исполнителя"
+            )
+        if creator_department_id is not None and int(creator_department_id) != int(department_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Задачу можно ставить только в подразделении исполнителя и создателя"
@@ -194,6 +444,8 @@ def put_task(id: int, data: Tasks, session: Session, user: Users = Depends(depar
         session.commit()
         session.refresh(result)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         session.rollback()
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -202,6 +454,18 @@ def put_task(id: int, data: Tasks, session: Session, user: Users = Depends(depar
 def update_task_status(task_id: int, status_data: TaskStatusUpdate, session: Session, user: Users) -> Tasks:
     """ Изменение статуса задачи пользователем, имеющим доступ к задаче """
     try:
+        if task_id <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Параметр 'task_id' должен быть больше нуля"
+            )
+        status_name = _as_stripped(status_data.status_name)
+        if not status_name:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Поле 'status_name' обязательно"
+            )
+
         task = session.get(Tasks, task_id)
         if not task:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Задача не найдена")
@@ -222,11 +486,11 @@ def update_task_status(task_id: int, status_data: TaskStatusUpdate, session: Ses
             )
         
         # Ищем статус по названию
-        status_obj = session.exec(select(Task_Status).where(Task_Status.name == status_data.status_name)).first()
+        status_obj = session.exec(select(Task_Status).where(Task_Status.name == status_name)).first()
         if not status_obj:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Статус '{status_data.status_name}' не найден"
+                detail=f"Статус '{status_name}' не найден"
             )
         
         # Обновляем статус
@@ -248,6 +512,18 @@ def update_task_status(task_id: int, status_data: TaskStatusUpdate, session: Ses
 def add_comment_to_task(task_id: int, comment_data: TaskCommentCreate, session: Session, user: Users) -> TaskComments:
     """ Добавление комментария к задаче """
     try:
+        if task_id <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Параметр 'task_id' должен быть больше нуля"
+            )
+        comment_text = _as_stripped(comment_data.comment_text)
+        if not comment_text:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Поле 'comment_text' обязательно"
+            )
+
         # Проверяем, что задача существует
         task = session.get(Tasks, task_id)
         if not task:
@@ -272,7 +548,7 @@ def add_comment_to_task(task_id: int, comment_data: TaskCommentCreate, session: 
         comment = TaskComments(
             task_id=task_id,
             author_id=user.id,
-            comment_text=comment_data.comment_text
+            comment_text=comment_text
         )
         
         session.add(comment)

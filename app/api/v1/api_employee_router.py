@@ -9,6 +9,7 @@ from app.controllers.employee_controller import (
     delete_employee, 
     put_employee, 
     get_my_department_employees, 
+    get_current_user_department_employees,
     post_employee_to_my_department,
     delete_employee_from_my_department,
     put_employee_from_my_department
@@ -43,6 +44,10 @@ def employees_list_route(session: Session = Depends(get_session), user: Users = 
 @router.get("/employees/manager-department", tags=["Сотрудники"], response_model=Page[Employees], description="Вывод всех работников подразделения менеджера. Только для менеджеров.", summary="Список работников подразделения по менеджеру")
 def my_department_employees_route(session: Session = Depends(get_session), user: Users = Depends(department_manager_required)):
     return get_my_department_employees(session, user)
+
+@router.get("/employees/my-department", tags=["Сотрудники"], response_model=Page[Employees], description="Вывод всех работников подразделения текущего пользователя", summary="Список работников своего подразделения")
+def current_user_department_employees_route(session: Session = Depends(get_session), user: Users = Depends(get_current_user)):
+    return get_current_user_department_employees(session, user)
 @router.get("/employees/{id}", tags=["Сотрудники"], description="Только с правами администратора", summary="Сотрудник по id")
 def employee_by_id_route(id: int, session: Session = Depends(get_session), user: Users = Depends(admin_required)):
     return get_employee_by_id(id, session)

@@ -1,7 +1,6 @@
 from pydantic import BaseModel
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, List
-from app.models.tasks import Tasks
 from app.models.departments_model import Departments
 
 
@@ -24,7 +23,7 @@ class DepartmentTasksGroup(BaseModel):
     """Схема для группы задач по отделу"""
     department_id: int
     department_name: str
-    tasks: List[Tasks]
+    tasks: List["GetTaskSchema"]
 
 
 class TasksGroupedByDepartment(BaseModel):
@@ -40,9 +39,24 @@ class TaskStatusUpdate(BaseModel):
 class TaskCommentCreate(BaseModel):
     """Схема для создания комментария к задаче"""
     comment_text: str
+
+
+class TaskCommentSchema(BaseModel):
+    """Схема комментария в ответе задачи"""
+    id: int
+    author_id: int
+    author: str
+    comment_text: str
+    created_at: datetime
+
+
 class GetTaskSchema(BaseModel):
     """Схема для получения задачи"""
     id: int
+    creator_id: int
+    assignee_id: int
+    department_id: int
+    status_id: int
     title: str
     description: str
     creator: str
@@ -52,4 +66,5 @@ class GetTaskSchema(BaseModel):
     priority: str
     planned_start_date: date
     planned_end_date: date
+    comments: List[TaskCommentSchema] = []
 
