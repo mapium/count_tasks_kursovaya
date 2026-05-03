@@ -64,7 +64,9 @@ class GetTaskSchema(BaseModel):
     department: str
     status: str
     priority: str
-    planned_start_date: date
-    planned_end_date: date
+    planned_start_date: Optional[date] = None
+    planned_end_date: Optional[date] = None
+    actual_start_date: Optional[date] = None
+    actual_end_date: Optional[date] = None
     comments: List[TaskCommentSchema] = []
 

@@ -44,9 +44,19 @@ def my_tasks_route(session: Session = Depends(get_session), user: Users = Depend
 def create_task_route(task: TaskCreate, session: Session = Depends(get_session), user: Users = Depends(department_manager_required)):
     return post_task(task, session)
 
-@router.put("/tasks/{id}", tags=["Задачи"], description="только с правами менеджера и выше", summary="Изменить задачу")
-def put_task_route(id: int, data: Tasks, session: Session = Depends(get_session), user: Users = Depends(department_manager_required)):
-    return put_task(id, data, session)
+@router.put(
+    "/tasks/{id}",
+    tags=["Задачи"],
+    description="Сотрудник может менять только статус и фактические даты; manager/admin — все поля",
+    summary="Изменить задачу",
+)
+def put_task_route(
+    id: int,
+    data: Tasks,
+    session: Session = Depends(get_session),
+    user: Users = Depends(get_current_user),
+):
+    return put_task(id, data, session, user)
 
 @router.delete("/tasks/{id}", tags=["Задачи"], description="только с правами менеджера и выше", summary="Удалить задачу")
 def delete_task_route(id: int, session: Session = Depends(get_session), user: Users = Depends(department_manager_required)):

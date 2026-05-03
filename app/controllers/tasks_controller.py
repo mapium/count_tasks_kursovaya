@@ -141,6 +141,8 @@ def _task_to_schema(task: Tasks, department_name: Optional[str] = None) -> GetTa
         priority=task.priority,
         planned_start_date=task.planned_start_date,
         planned_end_date=task.planned_end_date,
+        actual_start_date=task.actual_start_date,
+        actual_end_date=task.actual_end_date,
         comments=comments,
     )
 
@@ -353,7 +355,7 @@ def delete_task(id: int, session: Session, user: Users = Depends(department_mana
         raise HTTPException( status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=f"Внутренняя ошибка сервера: {str(e)}")
 
-def put_task(id: int, data: Tasks, session: Session, user: Users = Depends(department_manager_required)) -> Tasks:
+def put_task(id: int, data: Tasks, session: Session, user: Users = Depends(get_current_user)) -> Tasks:
     """ Изменение """
     try:
         if id <= 0:
@@ -370,6 +372,25 @@ def put_task(id: int, data: Tasks, session: Session, user: Users = Depends(depar
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Не переданы поля для обновления задачи"
             )
+        is_admin = user.role_id == 1
+        is_manager = user.role_id == 2
+        if not (is_admin or is_manager):
+            has_access = result.creator_id == user.id or result.assignee_id == user.id
+            if not has_access:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="У вас нет доступа к редактированию этой задачи",
+                )
+            allowed_fields_for_employee = {"status_id", "actual_start_date", "actual_end_date"}
+            forbidden_fields = sorted(set(updates.keys()) - allowed_fields_for_employee)
+            if forbidden_fields:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Сотрудник может изменять только статус и фактические даты "
+                        "(actual_start_date, actual_end_date)"
+                    ),
+                )
 
         if "title" in updates and not _as_stripped(updates.get("title")):
             raise HTTPException(

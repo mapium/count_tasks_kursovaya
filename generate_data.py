@@ -2,7 +2,7 @@
 Скрипт для генерации тестовых данных с помощью Faker
 """
 import random
-from typing import List
+from typing import List, Set
 from datetime import date, timedelta
 from faker import Faker
 from faker.providers import BaseProvider
@@ -39,6 +39,21 @@ class RussianProvider(BaseProvider):
         return random.choice(["малый", "средний", "высокий"])
 
 fake.add_provider(RussianProvider)
+
+
+def _generate_unique_username(session: Session, used_usernames: Set[str]) -> str:
+    """Генерирует уникальный username на основе Faker и проверяет коллизии в БД."""
+    while True:
+        candidate = fake.user_name()
+        if not candidate:
+            continue
+        if candidate in used_usernames:
+            continue
+        exists = session.exec(select(Users).where(Users.username == candidate)).first()
+        if exists:
+            continue
+        used_usernames.add(candidate)
+        return candidate
 
 
 def generate_roles(session: Session):
@@ -124,13 +139,16 @@ def generate_managers(session: Session, roles: list, count: int = 5):
     """Генерация менеджеров для подразделений"""
     print(f"Генерация {count} менеджеров")
     managers: List[Users] = []
+    used_usernames: Set[str] = set(
+        session.exec(select(Users.username)).all()
+    )
     
     manager_role = next((r for r in roles if r.name == "manager"), None)
     if not manager_role:
         raise ValueError("Роль менеджера не найдена")
     
     for i in range(count):
-        username = fake.user_name() + str(random.randint(100, 999))
+        username = _generate_unique_username(session, used_usernames)
         password = ph.hash("password123")
         
         manager = Users(
@@ -146,10 +164,13 @@ def generate_managers(session: Session, roles: list, count: int = 5):
     return managers
 
 
-def generate_users(session: Session, roles: list, managers_count: int, count: int = 20):
+def generate_users(session: Session, roles: list, count: int = 20):
     """Генерация пользователей (сотрудников и админа)"""
     print(f"Генерация {count} пользователей")
     users = []
+    used_usernames: Set[str] = set(
+        session.exec(select(Users.username)).all()
+    )
     
     # Первый пользователь - админ (если еще не существует)
     admin_role = next((r for r in roles if r.name == "admin"), None)
@@ -172,7 +193,7 @@ def generate_users(session: Session, roles: list, managers_count: int, count: in
     employee_role = next((r for r in roles if r.name == "employee"), None)
     
     for i in range(count):
-        username = fake.user_name() + str(random.randint(100, 999))
+        username = _generate_unique_username(session, used_usernames)
         password = ph.hash("password123")  # Все имеют одинаковый пароль для тестирования
         
         role_id = employee_role.id if employee_role else roles[-1].id
@@ -194,9 +215,22 @@ def generate_employees(session: Session, users: list, departments: list, count: 
     """Генерация сотрудников"""
     print(f"Генерация {count} сотрудников")
     employees = []
-    
-    for i in range(min(count, len(users))):
-        user = users[i] if i < len(users) else random.choice(users)
+    manager_department_by_user = {
+        dep.department_manager_id: dep.id
+        for dep in departments
+        if isinstance(dep, Departments)
+        and dep.department_manager_id is not None
+        and dep.id is not None
+    }
+    eligible_users = [user for user in users if isinstance(user, Users) and user.username != "admin"]
+    manager_users = [user for user in eligible_users if user.id in manager_department_by_user]
+    other_users = [user for user in eligible_users if user.id not in manager_department_by_user]
+    target_users = manager_users[: min(count, len(manager_users))]
+    remaining_slots = max(0, count - len(target_users))
+    if remaining_slots > 0:
+        target_users.extend(other_users[:remaining_slots])
+
+    for user in target_users:
         
         # Проверяем, нет ли уже сотрудника для этого пользователя
         existing_employee = session.exec(select(Employees).where(Employees.user_id == user.id)).first()
@@ -204,17 +238,20 @@ def generate_employees(session: Session, users: list, departments: list, count: 
             employees.append(existing_employee)
             continue
         
+        manager_department_id = manager_department_by_user.get(user.id)
+        department_id = manager_department_id if manager_department_id is not None else random.choice(departments).id
+
         employee = Employees(
             user_id=user.id,
             first_name=fake.first_name(),
             last_name=fake.last_name(),
             middle_name=fake.middle_name() if random.choice([True, False]) else None,
             phone_number=f"+7{random.randint(9000000000, 9999999999)}",
-            email=fake.unique.email(),
+            email=f"{user.username}@gmail.com",
             passport_data=fake.passport_series_number(),
             inn=fake.inn() if random.choice([True, False]) else None,
             snils=fake.snils() if random.choice([True, False]) else None,
-            department_id=random.choice(departments).id,
+            department_id=department_id,
             is_active=random.choice([True, True, True, False])  # 75% активных
         )
         session.add(employee)
@@ -241,7 +278,11 @@ def generate_tasks(session: Session, users: list, employees: list, statuses: lis
     ]
 
     # Сопоставление user_id -> department_id
-    user_dept = {emp.user_id: emp.department_id for emp in employees if emp.user_id is not None}
+    user_dept = {
+        emp.user_id: emp.department_id
+        for emp in employees
+        if emp.user_id is not None and emp.department_id is not None and emp.is_active
+    }
     
     for i in range(count):
         if not user_dept:
@@ -318,7 +359,7 @@ def main():
             departments = generate_departments(session, managers, count=departments_count)
             
             # Затем создаем остальных пользователей (сотрудников и админа)
-            users = generate_users(session, roles, managers_count=departments_count, count=20)
+            users = generate_users(session, roles, count=20)
             employees = generate_employees(session, users, departments, count=20)
             tasks = generate_tasks(session, users, employees, statuses, count=50)
             
