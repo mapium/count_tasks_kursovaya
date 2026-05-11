@@ -5,13 +5,18 @@ from fastapi import Depends, HTTPException, status
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import select, Session
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from app.core.security import create_access_token, decode_token, admin_required
+from app.core.security import create_access_token, decode_token, admin_required, get_current_user
 from app.db.session import get_session
 from app.models.users import Users
-from app.models.departments_model import Departments
-from app.schemas.user_schema import UserSchema, UserSchemaCreate, UserSchemaCreateAsAdmin, UserLogin
+from app.schemas.user_schema import (
+    UserSchema,
+    UserSchemaCreate,
+    UserSchemaCreateAsAdmin,
+    UserLogin,
+    UserUpdateAsAdmin,
+    UserPasswordChange,
+)
 from dotenv import load_dotenv
 import os
 ph=PasswordHasher()
@@ -41,21 +46,6 @@ def registration(data:UserSchemaCreate=Depends(UserSchemaCreate.as_form),session
 def admin_registration(data: UserSchemaCreateAsAdmin, user: Users = Depends(admin_required), session: Session = Depends(get_session)):
     """ Добавление пользователя администратором """
     try:
-        # Проверка: если роль менеджера (role_id == 2), проверяем количество менеджеров
-        if data.role_id == 2:
-            # Получаем количество подразделений
-            departments_count = session.exec(select(func.count(Departments.id))).one()
-            
-            # Получаем количество существующих менеджеров
-            managers_count = session.exec(select(func.count(Users.id)).where(Users.role_id == 2)).one()
-            
-            # Проверяем, не превышает ли количество менеджеров количество подразделений
-            if managers_count >= departments_count:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Невозможно добавить менеджера: количество менеджеров ({managers_count}) не должно превышать количество подразделений ({departments_count})"
-                )
-        
         obj = Users(
             username=data.username,
             password=ph.hash(data.password),
@@ -111,7 +101,9 @@ def refresh_access_token(refresh_token: str):
 
 
 def get_users(user: Users = Depends(admin_required),session: Session = Depends(get_session), page: int = 1, size: int = 10) -> Page[Users]:
-    " Вывод информации о пользователях """
+    """Возвращает список пользователей с пагинацией.
+    Доступно только администратору.
+    """
     try:
         sql = select(Users)
         return paginate(session, sql)
@@ -120,5 +112,113 @@ def get_users(user: Users = Depends(admin_required),session: Session = Depends(g
         session.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Внутренняя ошибка сервера: {str(e)}")
+
+
+def update_user_by_admin(
+    user_id: int,
+    data: UserUpdateAsAdmin,
+    current_user: Users = Depends(admin_required),
+    session: Session = Depends(get_session),
+) -> Users:
+    """Обновляет данные пользователя по ID от имени администратора.
+    Поддерживает смену роли и необязательную смену пароля.
+    """
+    try:
+        user = session.get(Users, user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+        user.username = data.username
+        user.role_id = data.role_id
+        if data.password:
+            user.password = ph.hash(data.password)
+
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return user
+    except HTTPException:
+        raise
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ошибка: дубликат или нарушение целостности данных",
+        )
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Внутренняя ошибка сервера: {str(e)}",
+        )
+
+
+def delete_user_by_admin(
+    user_id: int,
+    current_user: Users = Depends(admin_required),
+    session: Session = Depends(get_session),
+):
+    """Удаляет пользователя по ID от имени администратора.
+    Запрещает удаление текущего авторизованного администратора.
+    """
+    try:
+        if current_user.id == user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Нельзя удалить текущего администратора",
+            )
+
+        user = session.get(Users, user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+        session.delete(user)
+        session.commit()
+        return {"detail": "Пользователь удален"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Внутренняя ошибка сервера: {str(e)}",
+        )
+
+
+def change_my_password(
+    data: UserPasswordChange,
+    current_user: Users = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Изменяет пароль текущего авторизованного пользователя.
+    Проверяет старый пароль и минимальную длину нового.
+    """
+    try:
+        if not data.new_password or len(data.new_password.strip()) < 4:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Новый пароль должен содержать минимум 4 символа",
+            )
+
+        try:
+            ph.verify(current_user.password, data.old_password)
+        except VerifyMismatchError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Старый пароль указан неверно",
+            )
+
+        current_user.password = ph.hash(data.new_password)
+        session.add(current_user)
+        session.commit()
+        return {"detail": "Пароль успешно изменен"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Внутренняя ошибка сервера: {str(e)}",
+        )
 
 

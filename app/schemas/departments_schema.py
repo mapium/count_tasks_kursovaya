@@ -1,17 +1,25 @@
-from pydantic  import BaseModel
+from typing import Optional
 
 from fastapi import Form
-from sqlmodel import Field
-
 from pydantic import BaseModel
-from fastapi import Form
 
 class DepartmentsCreateSchema(BaseModel):
     name: str
     description: str
+    department_manager_id: Optional[int] = None
 
     @classmethod
-    def as_form(        cls,
+    def as_form(
+        cls,
         name: str = Form(..., description="Имя подразделения"),
-        description: str = Form(..., description="Описание подразделения")    ):
-        return cls(name=name, description=description)
+        description: str = Form(..., description="Описание подразделения"),
+        department_manager_id: Optional[int] = Form(None, description="ID менеджера подразделения"),
+    ):
+        """Создает схему подразделения из form-данных.
+        Поддерживает необязательную привязку менеджера.
+        """
+        return cls(
+            name=name,
+            description=description,
+            department_manager_id=department_manager_id,
+        )

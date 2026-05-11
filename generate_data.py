@@ -84,7 +84,6 @@ def generate_task_statuses(session: Session):
         {"name": "В работе", "order_index": 2},
         {"name": "На проверке", "order_index": 3},
         {"name": "Выполнено", "order_index": 4},
-        {"name": "Просрочено", "order_index": 5},
     ]
     
     for status_data in statuses_data:
@@ -274,7 +273,6 @@ def generate_tasks(session: Session, users: list, employees: list, statuses: lis
         "В работе",
         "На проверке",
         "Выполнено",
-        "Просрочено",
     ]
 
     # Сопоставление user_id -> department_id
@@ -304,11 +302,7 @@ def generate_tasks(session: Session, users: list, employees: list, statuses: lis
 
         actual_start = None
         actual_end = None
-        if selected_status_name == "Просрочено":
-            planned_start = today - timedelta(days=random.randint(20, 60))
-            planned_end = today - timedelta(days=random.randint(1, 15))
-            actual_start = planned_start + timedelta(days=random.randint(0, 5))
-        elif selected_status_name == "Выполнено":
+        if selected_status_name == "Выполнено":
             actual_start = planned_start + timedelta(days=random.randint(0, 5))
             min_end = max(1, (planned_end - actual_start).days)
             actual_end = actual_start + timedelta(days=random.randint(1, min_end))

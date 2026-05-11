@@ -27,10 +27,16 @@ ALLOWED_PRIORITIES = {"малый", "средний", "высокий"}
 
 
 def _as_stripped(value: Any) -> str:
+    """Возвращает строковое значение без внешних пробелов.
+    None и пустые значения приводятся к пустой строке.
+    """
     return str(value or "").strip()
 
 
 def _require_positive_int(value: Any, field_label: str) -> int:
+    """Преобразует значение в положительное целое число.
+    Вызывает HTTP 422, если значение невалидно.
+    """
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -47,6 +53,9 @@ def _require_positive_int(value: Any, field_label: str) -> int:
 
 
 def _validate_task_payload_required(payload: Dict[str, Any]) -> None:
+    """Проверяет обязательные поля payload для создания задачи.
+    Вызывает HTTP 422 при пустых или некорректных данных.
+    """
     title = _as_stripped(payload.get("title"))
     description = _as_stripped(payload.get("description"))
     priority = _as_stripped(payload.get("priority")).lower()
@@ -92,6 +101,9 @@ def _resolve_creator_department_id(
     creator_emp: Optional[Employees],
     creator_user: Optional[Users]
 ) -> Optional[int]:
+    """Определяет подразделение создателя задачи.
+    Для администратора возвращает None как особый случай.
+    """
     creator_is_admin = bool(creator_user and creator_user.role_id == 1)
     if creator_is_admin:
         return None
@@ -148,6 +160,9 @@ def _task_to_schema(task: Tasks, department_name: Optional[str] = None) -> GetTa
 
 
 def _ensure_task_access(task: Tasks, user: Users) -> None:
+    """Проверяет, что пользователь имеет доступ к задаче.
+    Доступ есть у создателя, исполнителя, админа и менеджера.
+    """
     has_access = (
         task.creator_id == user.id
         or task.assignee_id == user.id
@@ -205,11 +220,8 @@ def get_task_comments(task_id: int, session: Session, user: Users) -> List[TaskC
 def get_all_tasks(session: Session, user: Users = Depends(department_manager_required)) -> TasksGroupedByDepartment:
     """ Вывод информации, сгруппированной по подразделениям """
     try:
-        # Получаем все задачи с информацией об отделах через JOIN
         sql = select(Tasks, Departments).join(Departments, Tasks.department_id == Departments.id).order_by(Departments.id, Tasks.id)
         results = session.exec(sql).all()
-        
-        # Группируем задачи по отделам
         grouped_tasks: Dict[int, Dict[str, Any]] = {}
         
         for task, department in results:
@@ -220,8 +232,7 @@ def get_all_tasks(session: Session, user: Users = Depends(department_manager_req
                     "tasks": []
                 }
             grouped_tasks[department.id]["tasks"].append(_task_to_schema(task, department.name))
-        
-        # Преобразуем в список групп
+    
         departments_groups = [
             DepartmentTasksGroup(
                 department_id=group["department_id"],
@@ -240,7 +251,6 @@ def get_all_tasks(session: Session, user: Users = Depends(department_manager_req
 def get_tasks_by_department_id(session: Session, user: Users) -> Page[GetTaskSchema]:
     """ Вывод всех задач подразделения текущего пользователя """
     try:
-        # Находим сотрудника по user_id, чтобы получить department_id
         employee = session.exec(select(Employees).where(Employees.user_id == user.id)).first()
         
         if not employee:
@@ -248,8 +258,6 @@ def get_tasks_by_department_id(session: Session, user: Users) -> Page[GetTaskSch
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Сотрудник не найден для данного пользователя"
             )
-        
-        # Получаем задачи только подразделения пользователя
         sql = select(Tasks).where(Tasks.department_id == employee.department_id)
         tasks = session.exec(sql).all()
         tasks_schema = [_task_to_schema(task) for task in tasks]
@@ -280,8 +288,6 @@ def post_task(data: TaskCreate, session: Session, user: Users = Depends(departme
     try:
         payload = data.dict()
         _validate_task_payload_required(payload)
-
-        # Проверяем, что исполнитель и создатель корректно привязаны к подразделению
         assignee_emp = session.exec(select(Employees).where(Employees.user_id == payload["assignee_id"])).first()
         creator_emp = session.exec(select(Employees).where(Employees.user_id == payload["creator_id"])).first()
         creator_user = session.get(Users, payload["creator_id"])
@@ -291,8 +297,6 @@ def post_task(data: TaskCreate, session: Session, user: Users = Depends(departme
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Исполнитель должен быть привязан к подразделению"
             )
-
-        # Нормализуем идентификаторы, чтобы избежать ложных срабатываний при сравнении.
         assignee_department_id = int(assignee_emp.department_id)
         payload_department_id = int(payload["department_id"])
         creator_department_id = _resolve_creator_department_id(
@@ -314,8 +318,6 @@ def post_task(data: TaskCreate, session: Session, user: Users = Depends(departme
             )
 
         if payload_department_id != assignee_department_id:
-            # Подтягиваем корректное подразделение автоматически, чтобы не падать
-            # из-за устаревшего/неконсистентного значения из формы.
             payload["department_id"] = assignee_department_id
 
         task = Tasks(**payload)
@@ -428,7 +430,6 @@ def put_task(id: int, data: Tasks, session: Session, user: Users = Depends(get_c
                     detail="Поле 'planned_end_date' не может быть раньше 'planned_start_date'"
                 )
 
-        # Если меняются исполнители/создатели/подразделение — проверяем согласованность
         assignee_id = updates.get("assignee_id", result.assignee_id)
         creator_id = updates.get("creator_id", result.creator_id)
         department_id = updates.get("department_id", result.department_id)
@@ -490,14 +491,12 @@ def update_task_status(task_id: int, status_data: TaskStatusUpdate, session: Ses
         task = session.get(Tasks, task_id)
         if not task:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Задача не найдена")
-        
-        # Проверка доступа: пользователь должен быть создателем или исполнителем задачи
-        # Администраторы и руководители отделов имеют доступ ко всем задачам
+
         has_access = (
             task.creator_id == user.id or 
             task.assignee_id == user.id or
-            user.role_id == 1 or  # Администратор
-            user.role_id == 2     # Руководитель отдела
+            user.role_id == 1 or
+            user.role_id == 2
         )
         
         if not has_access:
@@ -506,7 +505,6 @@ def update_task_status(task_id: int, status_data: TaskStatusUpdate, session: Ses
                 detail="У вас нет доступа к изменению статуса этой задачи"
             )
         
-        # Ищем статус по названию
         status_obj = session.exec(select(Task_Status).where(Task_Status.name == status_name)).first()
         if not status_obj:
             raise HTTPException(
@@ -514,7 +512,6 @@ def update_task_status(task_id: int, status_data: TaskStatusUpdate, session: Ses
                 detail=f"Статус '{status_name}' не найден"
             )
         
-        # Обновляем статус
         task.status_id = status_obj.id
         task.updated_at = datetime.now(timezone.utc)
         
@@ -545,18 +542,15 @@ def add_comment_to_task(task_id: int, comment_data: TaskCommentCreate, session: 
                 detail="Поле 'comment_text' обязательно"
             )
 
-        # Проверяем, что задача существует
         task = session.get(Tasks, task_id)
         if not task:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Задача не найдена")
         
-        # Проверка доступа: пользователь должен иметь доступ к задаче
-        # Администраторы и руководители отделов имеют доступ ко всем задачам
         has_access = (
             task.creator_id == user.id or 
             task.assignee_id == user.id or
-            user.role_id == 1 or  # Администратор
-            user.role_id == 2     # Руководитель отдела
+            user.role_id == 1 or
+            user.role_id == 2
         )
         
         if not has_access:
@@ -565,7 +559,6 @@ def add_comment_to_task(task_id: int, comment_data: TaskCommentCreate, session: 
                 detail="У вас нет доступа к добавлению комментария к этой задаче"
             )
         
-        # Создаем комментарий
         comment = TaskComments(
             task_id=task_id,
             author_id=user.id,

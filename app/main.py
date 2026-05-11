@@ -12,12 +12,18 @@ from app.api.v1.api_users_router import router as user_router
 from app.core.security import oauth2_scheme
 @asynccontextmanager
 async def on_startup(app: FastAPI):
+    """Управляет жизненным циклом приложения.
+    Инициализирует БД при старте и закрывает при остановке.
+    """
     init_db()
     yield
     close_db()
 
 app_v1 = FastAPI(title="API по учёту производственных задач", lifespan=on_startup, description="Приложение содержит информацию о контингенте сотрудников предприятия и распределению их по подразделениям, а также проводит учёт производственных задач. Контактная информация: tg - crsd01, email - artem.miller2312@gmail.com", version="1.0.0")
 async def read_items(token: Annotated[str, Depends(oauth2_scheme)]):
+    """Возвращает токен из OAuth2-зависимости.
+    Используется как проверочный защищенный маршрут.
+    """
     return {"token": token}
 app_v1.include_router(user_router, prefix="/api/v1")
 app_v1.include_router(employee_router, prefix="/api/v1")

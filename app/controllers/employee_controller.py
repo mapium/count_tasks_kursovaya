@@ -9,6 +9,27 @@ from sqlalchemy.exc import IntegrityError
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 
+
+def _validate_employee_user_binding(session: Session, user_id: Optional[int], current_employee_id: Optional[int] = None):
+    """Проверяет, что user_id существует и не привязан к другому сотруднику."""
+    if user_id is None:
+        return
+    existing_user = session.get(Users, user_id)
+    if not existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Пользователь с ID {user_id} не найден",
+        )
+    query = select(Employees).where(Employees.user_id == user_id)
+    if current_employee_id is not None:
+        query = query.where(Employees.id != current_employee_id)
+    linked_employee = session.exec(query).first()
+    if linked_employee:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Пользователь с ID {user_id} уже привязан к другому сотруднику",
+        )
+
 def get_all_employees(session: Session) -> Page[Employees]:
     """ Вывод информации """
     try:
@@ -34,6 +55,7 @@ def get_employee_by_id(id: int, session: Session) -> Employees:
 def post_employee(data: EmployeeCreate, session: Session) -> Optional[Employees]:
     """ Добавление сотрудника с валидацией данных """
     try:
+        _validate_employee_user_binding(session, data.user_id)
         employee = Employees(**data.dict(exclude_unset=True))
         session.add(employee)
         session.commit()
@@ -105,30 +127,7 @@ def put_employee(id: int, data: EmployeeUpdate, session: Session, user: Users) -
         
         # Обработка user_id: проверка существования и занятости
         if 'user_id' in update_data and update_data['user_id'] is not None:
-            user_id = update_data['user_id']
-            
-            # Проверяем, существует ли пользователь
-            existing_user = session.get(Users, user_id)
-            
-            if not existing_user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Пользователь с ID {user_id} не найден"
-                )
-            
-            # Проверяем, не занят ли пользователь другим сотрудником
-            other_employee = session.exec(
-                select(Employees).where(
-                    Employees.user_id == user_id,
-                    Employees.id != id
-                )
-            ).first()
-            
-            if other_employee:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Пользователь с ID {user_id} уже привязан к другому сотруднику"
-                )
+            _validate_employee_user_binding(session, update_data['user_id'], current_employee_id=id)
         
         # Обновляем данные
         for key, value in update_data.items():
@@ -213,6 +212,7 @@ def post_employee_to_my_department(data: EmployeeCreate, session: Session, user:
                 detail=f"Вы можете добавлять работников только в свой отдел (ID: {department.id})"
             )
         
+        _validate_employee_user_binding(session, data.user_id)
         # Создаем сотрудника
         employee = Employees(**data.dict(exclude_unset=True))
         session.add(employee)
@@ -316,30 +316,7 @@ def put_employee_from_my_department(id: int, data: EmployeeUpdate, session: Sess
         
         # Обработка user_id: проверка существования и занятости
         if 'user_id' in update_data and update_data['user_id'] is not None:
-            user_id = update_data['user_id']
-            
-            # Проверяем, существует ли пользователь
-            existing_user = session.get(Users, user_id)
-            
-            if not existing_user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Пользователь с ID {user_id} не найден"
-                )
-            
-            # Проверяем, не занят ли пользователь другим сотрудником
-            other_employee = session.exec(
-                select(Employees).where(
-                    Employees.user_id == user_id,
-                    Employees.id != id
-                )
-            ).first()
-            
-            if other_employee:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Пользователь с ID {user_id} уже привязан к другому сотруднику"
-                )
+            _validate_employee_user_binding(session, update_data['user_id'], current_employee_id=id)
         
         # Обновляем данные
         for key, value in update_data.items():

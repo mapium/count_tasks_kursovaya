@@ -18,18 +18,27 @@ class EmployeeCreate(BaseModel):
     
     @validator('passport_data')
     def validate_passport_data(cls, v):
+        """Проверяет минимальную длину паспортных данных.
+        Выбрасывает ValueError при некорректном значении.
+        """
         if v and len(v) < 10:
             raise ValueError('Паспортные данные должны содержать не менее 10 символов')
         return v
     
     @validator('inn')
     def validate_inn(cls, v):
+        """Проверяет минимальную длину ИНН.
+        Пустое значение допускается как необязательное.
+        """
         if v is not None and len(v) < 12:
             raise ValueError('ИНН должен содержать не менее 12 символов')
         return v
     
     @validator('snils')
     def validate_snils(cls, v):
+        """Проверяет минимальную длину СНИЛС.
+        Пустое значение допускается как необязательное.
+        """
         if v is not None and len(v) < 11:
             raise ValueError('СНИЛС должен содержать не менее 11 символов')
         return v
@@ -51,18 +60,27 @@ class EmployeeUpdate(BaseModel):
     
     @validator('passport_data')
     def validate_passport_data(cls, v):
+        """Проверяет минимальную длину паспортных данных при обновлении.
+        Выбрасывает ValueError при слишком коротком значении.
+        """
         if v is not None and len(v) < 10:
             raise ValueError('Паспортные данные должны содержать не менее 10 символов')
         return v
     
     @validator('inn')
     def validate_inn(cls, v):
+        """Проверяет минимальную длину ИНН при обновлении.
+        Пустое значение допускается как необязательное.
+        """
         if v is not None and len(v) < 12:
             raise ValueError('ИНН должен содержать не менее 12 символов')
         return v
     
     @validator('snils')
     def validate_snils(cls, v):
+        """Проверяет минимальную длину СНИЛС при обновлении.
+        Пустое значение допускается как необязательное.
+        """
         if v is not None and len(v) < 11:
             raise ValueError('СНИЛС должен содержать не менее 11 символов')
         return v
